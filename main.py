@@ -129,3 +129,67 @@ tflite_model = converter.convert()
 
 with open("capuchin_float.tflite", "wb") as f:
     f.write(tflite_model)
+
+
+
+def representative_data_gen():
+    for mfcc, _ in train.take(50):
+        yield [mfcc]
+
+
+converter = tf.lite.TFLiteConverter.from_saved_model("capuchin_model")
+
+converter.optimizations = [tf.lite.Optimize.DEFAULT]
+converter.representative_dataset = representative_data_gen
+
+converter.target_spec.supported_ops = [tf.lite.OpsSet.TFLITE_BUILTINS_INT8]
+converter.inference_input_type = tf.int8
+converter.inference_output_type = tf.int8
+
+tflite_quant_model = converter.convert()
+
+with open("capuchin_int8.tflite", "wb") as f:
+    f.write(tflite_quant_model)
+
+
+mfcc, label = next(iter(val.unbatch().take(1)))
+
+
+mfcc_batch = tf.expand_dims(mfcc, axis=0)
+
+# Keras prediction (float32)
+keras_pred = model.predict(mfcc_batch)
+print("Keras output:", keras_pred)
+print("Keras class:", int(keras_pred > 0.5))
+
+#predicting using quantized model
+interpreter = tf.lite.Interpreter("capuchin_int8.tflite")
+interpreter.allocate_tensors()
+
+input_details = interpreter.get_input_details()
+output_details = interpreter.get_output_details()
+
+# Quantize input
+in_scale, in_zero = input_details[0]['quantization']
+mfcc_q = mfcc / in_scale + in_zero
+mfcc_q = mfcc_q.numpy().astype(np.int8)
+mfcc_q = np.expand_dims(mfcc_q, axis=0)
+
+
+interpreter.set_tensor(input_details[0]['index'], mfcc_q)
+interpreter.invoke()
+
+
+output_q = interpreter.get_tensor(output_details[0]['index'])
+
+# Dequantize output
+out_scale, out_zero = output_details[0]['quantization']
+tflite_pred = out_scale * (output_q - out_zero)
+
+print("TFLite output:", tflite_pred)
+print("TFLite class:", int(tflite_pred > 0.5))
+
+#see difference between outputs
+diff = abs(keras_pred - tflite_pred)
+print("Absolute difference:", diff)
+
