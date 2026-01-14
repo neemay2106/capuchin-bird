@@ -3,9 +3,13 @@ This project's main objective is to classify a capuchin birds call from a other 
 I had used this video for main inspiration for this project, and how to write and structure the code https://www.youtube.com/watch?v=ZLIPkmmDJAc&t=3380s
 
 **Tech stack**
+
 1)numpy
+
 2)tensorflow 
+
 3)librosa
+
 4)matplotlib
 
 **Features**
